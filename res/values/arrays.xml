@@ -128,4 +128,26 @@
     <item>3000,3000</item>
     <item>custom</item>
   </string-array>
+
+  <string-array name="pref_media_auto_download" translatable="false">
+    <item>images</item>
+    <item>audio</item>
+    <item>video</item>
+  </string-array>
+
+  <string-array name="pref_media_auto_download_entries">
+    <item>@string/preferences__media_images</item>
+    <item>@string/preferences__media_audio</item>
+    <item>@string/preferences__media_video</item>
+  </string-array>
+
+  <string-array name="pref_media_auto_download_mobile_data_defaults">
+    <item>images</item>
+  </string-array>
+
+  <string-array name="pref_media_auto_download_wifi_defaults">
+    <item>images</item>
+    <item>audio</item>
+    <item>video</item>
+  </string-array>
 </resources>

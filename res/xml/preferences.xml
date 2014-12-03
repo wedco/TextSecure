@@ -30,6 +30,26 @@
                             android:summary="@string/preferences__request_a_delivery_report_for_each_sms_message_you_send"
                             android:title="@string/preferences__sms_delivery_reports" />
     </PreferenceCategory>
+    <PreferenceCategory android:title="@string/preferences__media">
+        <MultiSelectListPreference android:key="pref_media_auto_download_mobile_data"
+                                   android:title="@string/preferences__media_mobile_data"
+                                   android:entries="@array/pref_media_auto_download_entries"
+                                   android:entryValues="@array/pref_media_auto_download"
+                                   android:dependency="pref_toggle_push_messaging" />
+
+        <MultiSelectListPreference android:key="pref_media_auto_download_wifi"
+                                   android:title="@string/preferences__media_wifi"
+                                   android:entries="@array/pref_media_auto_download_entries"
+                                   android:entryValues="@array/pref_media_auto_download"
+                                   android:dependency="pref_toggle_push_messaging" />
+
+        <MultiSelectListPreference android:key="pref_media_auto_download_roaming"
+                                   android:title="@string/preferences__media_roaming"
+                                   android:entries="@array/pref_media_auto_download_entries"
+                                   android:entryValues="@array/pref_media_auto_download"
+                                   android:dependency="pref_toggle_push_messaging" />
+
+    </PreferenceCategory>
     <PreferenceCategory android:title="@string/preferences__notifications">
         <CheckBoxPreference android:key="pref_key_enable_notifications"
                             android:title="@string/preferences__notifications"
