@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+                  xmlns:app="http://schemas.android.com/apk/res-auto">
     <PreferenceCategory android:key="push_sms_category" android:title="@string/preferences__push_sms_category">
         <CheckBoxPreference android:defaultValue="false"
                             android:key="pref_toggle_push_messaging"
@@ -31,23 +32,23 @@
                             android:title="@string/preferences__sms_delivery_reports" />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/preferences__media">
-        <MultiSelectListPreference android:key="pref_media_auto_download_mobile_data"
-                                   android:title="@string/preferences__media_mobile_data"
-                                   android:entries="@array/pref_media_auto_download_entries"
-                                   android:entryValues="@array/pref_media_auto_download"
-                                   android:dependency="pref_toggle_push_messaging" />
+        <org.thoughtcrime.securesms.preferences.MediaAutoDownloadPreference
+            android:key="pref_media_auto_download_mobile"
+            android:title="@string/preferences__media_mobile_data"
+            android:dependency="pref_toggle_push_messaging"
+            app:transport="mobile" />
 
-        <MultiSelectListPreference android:key="pref_media_auto_download_wifi"
-                                   android:title="@string/preferences__media_wifi"
-                                   android:entries="@array/pref_media_auto_download_entries"
-                                   android:entryValues="@array/pref_media_auto_download"
-                                   android:dependency="pref_toggle_push_messaging" />
+        <org.thoughtcrime.securesms.preferences.MediaAutoDownloadPreference
+            android:key="pref_media_auto_download_mobile"
+            android:title="@string/preferences__media_wifi"
+            android:dependency="pref_toggle_push_messaging"
+            app:transport="wifi" />
 
-        <MultiSelectListPreference android:key="pref_media_auto_download_roaming"
-                                   android:title="@string/preferences__media_roaming"
-                                   android:entries="@array/pref_media_auto_download_entries"
-                                   android:entryValues="@array/pref_media_auto_download"
-                                   android:dependency="pref_toggle_push_messaging" />
+        <org.thoughtcrime.securesms.preferences.MediaAutoDownloadPreference
+            android:key="pref_media_auto_download_mobile"
+            android:title="@string/preferences__media_roaming"
+            android:dependency="pref_toggle_push_messaging"
+            app:transport="roaming" />
 
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/preferences__notifications">
