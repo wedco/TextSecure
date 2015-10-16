@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.provider.ContactsContract.CommonDataKinds.Phone;
+import android.text.TextUtils;
 import android.util.Log;
 
 import org.whispersystems.textsecure.api.push.ContactTokenDetails;
@@ -22,23 +23,25 @@ import java.util.Set;
 public class TextSecureDirectory {
 
   private static final int INTRODUCED_CHANGE_FROM_TOKEN_TO_E164_NUMBER = 2;
+  private static final int INTRODUCED_VOICE_COLUMN                     = 4;
 
   private static final String DATABASE_NAME    = "whisper_directory.db";
-  private static final int    DATABASE_VERSION = 2;
+  private static final int    DATABASE_VERSION = 4;
 
   private static final String TABLE_NAME   = "directory";
   private static final String ID           = "_id";
   private static final String NUMBER       = "number";
   private static final String REGISTERED   = "registered";
   private static final String RELAY        = "relay";
-  private static final String SUPPORTS_SMS = "supports_sms";
   private static final String TIMESTAMP    = "timestamp";
+  private static final String VOICE        = "voice";
+
   private static final String CREATE_TABLE = "CREATE TABLE " + TABLE_NAME + "(" + ID + " INTEGER PRIMARY KEY, " +
                               NUMBER       + " TEXT UNIQUE, " +
                               REGISTERED   + " INTEGER, " +
                               RELAY        + " TEXT, " +
-                              SUPPORTS_SMS + " INTEGER, " +
-                              TIMESTAMP    + " INTEGER);";
+                              TIMESTAMP    + " INTEGER, " +
+                              VOICE        + " INTEGER);";
 
   private static final Object instanceLock = new Object();
   private static volatile TextSecureDirectory instance;
@@ -47,7 +50,7 @@ public class TextSecureDirectory {
     if (instance == null) {
       synchronized (instanceLock) {
         if (instance == null) {
-          instance = new TextSecureDirectory(context);
+          instance = new TextSecureDirectory(context.getApplicationContext());
         }
       }
     }
@@ -63,26 +66,7 @@ public class TextSecureDirectory {
     this.databaseHelper = new DatabaseHelper(context, DATABASE_NAME, null, DATABASE_VERSION);
   }
 
-  public boolean isSmsFallbackSupported(String e164number) {
-    SQLiteDatabase db = databaseHelper.getReadableDatabase();
-    Cursor cursor = null;
-
-    try {
-      cursor = db.query(TABLE_NAME, new String[] {SUPPORTS_SMS}, NUMBER + " = ?",
-                        new String[]{e164number}, null, null, null);
-
-      if (cursor != null && cursor.moveToFirst()) {
-        return cursor.getInt(0) == 1;
-      } else {
-        return false;
-      }
-    } finally {
-      if (cursor != null)
-        cursor.close();
-    }
-  }
-
-  public boolean isActiveNumber(String e164number) throws NotInDirectoryException {
+  public boolean isSecureTextSupported(String e164number) throws NotInDirectoryException {
     if (e164number == null || e164number.length() == 0) {
       return false;
     }
@@ -94,6 +78,31 @@ public class TextSecureDirectory {
       cursor = db.query(TABLE_NAME,
           new String[]{REGISTERED}, NUMBER + " = ?",
           new String[] {e164number}, null, null, null);
+
+      if (cursor != null && cursor.moveToFirst()) {
+        return cursor.getInt(0) == 1;
+      } else {
+        throw new NotInDirectoryException();
+      }
+
+    } finally {
+      if (cursor != null)
+        cursor.close();
+    }
+  }
+
+  public boolean isSecureVoiceSupported(String e164number) throws NotInDirectoryException {
+    if (TextUtils.isEmpty(e164number)) {
+      return false;
+    }
+
+    SQLiteDatabase db     = databaseHelper.getReadableDatabase();
+    Cursor         cursor = null;
+
+    try {
+      cursor = db.query(TABLE_NAME,
+                        new String[]{VOICE}, NUMBER + " = ?",
+                        new String[] {e164number}, null, null, null);
 
       if (cursor != null && cursor.moveToFirst()) {
         return cursor.getInt(0) == 1;
@@ -131,7 +140,6 @@ public class TextSecureDirectory {
     values.put(NUMBER, token.getNumber());
     values.put(RELAY, token.getRelay());
     values.put(REGISTERED, active ? 1 : 0);
-    values.put(SUPPORTS_SMS, token.isSupportsSms() ? 1 : 0);
     values.put(TIMESTAMP, System.currentTimeMillis());
     db.replace(TABLE_NAME, null, values);
   }
@@ -143,13 +151,13 @@ public class TextSecureDirectory {
 
     try {
       for (ContactTokenDetails token : activeTokens) {
-        Log.w("Directory", "Adding active token: " + token);
+        Log.w("Directory", "Adding active token: " + token.getNumber() + ", " + token.getToken());
         ContentValues values = new ContentValues();
         values.put(NUMBER, token.getNumber());
         values.put(REGISTERED, 1);
         values.put(TIMESTAMP, timestamp);
         values.put(RELAY, token.getRelay());
-        values.put(SUPPORTS_SMS, token.isSupportsSms() ? 1 : 0);
+        values.put(VOICE, token.isVoice());
         db.replace(TABLE_NAME, null, values);
       }
 
@@ -169,7 +177,7 @@ public class TextSecureDirectory {
 
   public Set<String> getPushEligibleContactNumbers(String localNumber) {
     final Uri         uri     = Phone.CONTENT_URI;
-    final Set<String> results = new HashSet<String>();
+    final Set<String> results = new HashSet<>();
           Cursor      cursor  = null;
 
     try {
@@ -208,7 +216,7 @@ public class TextSecureDirectory {
   }
 
   public List<String> getActiveNumbers() {
-    final List<String> results = new ArrayList<String>();
+    final List<String> results = new ArrayList<>();
     Cursor cursor = null;
     try {
       cursor = databaseHelper.getReadableDatabase().query(TABLE_NAME, new String[]{NUMBER},
@@ -224,7 +232,7 @@ public class TextSecureDirectory {
     }
   }
 
-  private class DatabaseHelper extends SQLiteOpenHelper {
+  private static class DatabaseHelper extends SQLiteOpenHelper {
 
     public DatabaseHelper(Context context, String name,
                           SQLiteDatabase.CursorFactory factory,
@@ -248,6 +256,10 @@ public class TextSecureDirectory {
                    "relay TEXT, " +
                    "supports_sms INTEGER, " +
                    "timestamp INTEGER);");
+      }
+
+      if (oldVersion < INTRODUCED_VOICE_COLUMN) {
+        db.execSQL("ALTER TABLE directory ADD COLUMN voice INTEGER;");
       }
     }
   }

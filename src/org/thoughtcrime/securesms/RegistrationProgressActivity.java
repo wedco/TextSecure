@@ -13,7 +13,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
-import android.support.v7.app.ActionBarActivity;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -30,6 +29,7 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.afollestad.materialdialogs.MaterialDialog;
 
 import org.thoughtcrime.securesms.crypto.MasterSecret;
 import org.thoughtcrime.securesms.push.TextSecureCommunicationFactory;
@@ -46,7 +46,9 @@ import java.io.IOException;
 
 import static org.thoughtcrime.securesms.service.RegistrationService.RegistrationState;
 
-public class RegistrationProgressActivity extends ActionBarActivity {
+public class RegistrationProgressActivity extends BaseActionBarActivity {
+
+  private static final String TAG = RegistrationProgressActivity.class.getSimpleName();
 
   private static final int FOCUSED_COLOR   = Color.parseColor("#ff333333");
   private static final int UNFOCUSED_COLOR = Color.parseColor("#ff808080");
@@ -163,16 +165,18 @@ public class RegistrationProgressActivity extends ActionBarActivity {
 
   private void initializeLinks() {
     TextView        failureText     = (TextView) findViewById(R.id.sms_failed_text);
-    String          pretext         = getString(R.string.registration_progress_activity__textsecure_timed_out_while_waiting_for_a_verification_sms_message);
+    String          pretext         = getString(R.string.registration_progress_activity__signal_timed_out_while_waiting_for_a_verification_sms_message);
     String          link            = getString(R.string.RegistrationProblemsActivity_possible_problems);
     SpannableString spannableString = new SpannableString(pretext + " " + link);
 
     spannableString.setSpan(new ClickableSpan() {
       @Override
       public void onClick(View widget) {
-        Intent intent = new Intent(RegistrationProgressActivity.this,
-                                   RegistrationProblemsActivity.class);
-        startActivity(intent);
+        new MaterialDialog.Builder(RegistrationProgressActivity.this)
+            .title(R.string.RegistrationProblemsActivity_possible_problems)
+            .customView(R.layout.registration_problems, true)
+            .neutralText(android.R.string.ok)
+            .show();
       }
     }, pretext.length() + 1, spannableString.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 
@@ -330,7 +334,7 @@ public class RegistrationProgressActivity extends ActionBarActivity {
     }
 
     shutdownService();
-    startActivity(new Intent(this, RoutingActivity.class));
+    startActivity(new Intent(this, ConversationListActivity.class));
     finish();
   }
 
@@ -429,7 +433,7 @@ public class RegistrationProgressActivity extends ActionBarActivity {
     }
   }
 
-  private class RegistrationReceiver extends BroadcastReceiver {
+  private static class RegistrationReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
       abortBroadcast();
@@ -516,19 +520,19 @@ public class RegistrationProgressActivity extends ActionBarActivity {
         protected Integer doInBackground(Void... params) {
           try {
             TextSecureAccountManager accountManager = TextSecureCommunicationFactory.createManager(context, e164number, password);
-            int registrationId = TextSecurePreferences.getLocalRegistrationId(context);
+            int                      registrationId = TextSecurePreferences.getLocalRegistrationId(context);
 
-            accountManager.verifyAccount(code, signalingKey, true, registrationId);
+            accountManager.verifyAccountWithCode(code, signalingKey, registrationId, true);
 
             return SUCCESS;
           } catch (ExpectationFailedException e) {
-            Log.w("RegistrationProgressActivity", e);
+            Log.w(TAG, e);
             return MULTI_REGISTRATION_ERROR;
           } catch (RateLimitException e) {
-            Log.w("RegistrationProgressActivity", e);
+            Log.w(TAG, e);
             return RATE_LIMIT_ERROR;
           } catch (IOException e) {
-            Log.w("RegistrationProgressActivity", e);
+            Log.w(TAG, e);
             return NETWORK_ERROR;
           }
         }

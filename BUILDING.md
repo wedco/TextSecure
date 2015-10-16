@@ -30,19 +30,17 @@ The following steps should help you (re)build TextSecure from the command line.
 
         ./gradlew build
 
-Re-building native components
------------------------------
+Visual assets
+----------------------
 
-Note: This step is optional; native components are contained as binaries (see [libaxolotl/libs](libaxolotl/libs)).
+Source assets tend to be large binary blobs, which are best stored outside of git repositories. We host ours in a [Pixelapse repository](https://www.pixelapse.com/openwhispersystems/projects/signal-android/). Some source files are SVGs that can be auto-colored and sized using a tool like [android-res-utils](https://github.com/sebkur/android-res-utils).
 
-1. Ensure that the Android NDK is installed.
+Sample command for generating our audio placeholder image:
 
-Execute ndk-build:
-
-    cd libaxolotl
-    ndk-build
-
-Afterwards, execute Gradle as above to re-create the APK.
+```bash
+pngs_from_svg.py ic_audio.svg /path/to/TextSecure/res/ 150 --color #000 --opacity 0.54 --suffix _light
+pngs_from_svg.py ic_audio.svg /path/to/TextSecure/res/ 150 --color #fff --opacity 1.00 --suffix _light
+```
 
 Setting up a development environment
 ------------------------------------

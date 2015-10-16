@@ -44,7 +44,8 @@
                       android:singleLine="true"
                       android:gravity="center"
                       android:inputType="phone"
-                      android:digits="0123456789" />
+                      android:digits="0123456789"
+                      android:maxLength="3" />
 
             <EditText android:id="@+id/number"
                       android:layout_width="0dip"
@@ -61,7 +62,7 @@
                   android:layout_width="fill_parent"
                   android:layout_marginBottom="8dip"
                   android:layout_marginTop="16dip"
-                  android:text="@string/registration_activity__textsecure_can_use_instant_messages_to_avoid_sms_charges_when_communicating_with_other_textsecure_users"/>
+                  android:text="@string/registration_activity__verify_your_number_to_connect_with_signal"/>
 
         <TextView style="@style/Registration.Description"
                   android:layout_width="fill_parent"
@@ -76,7 +77,8 @@
                       android:orientation="horizontal">
 
             <Button android:id="@+id/skipButton"
-                    android:text="@string/registration_activity__skip"
+                    android:visibility="gone"
+                    android:text="@android:string/cancel"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginRight="5dip"
@@ -90,6 +92,14 @@
                     android:layout_weight="1"
                     android:textAppearance="?android:attr/textAppearanceMedium"/>
         </LinearLayout>
+
+        <ImageView android:id="@+id/twilio_shoutout"
+                   android:layout_width="wrap_content"
+                   android:layout_height="wrap_content"
+                   android:src="@drawable/ic_twilio_shoutout_white"
+                   android:layout_gravity="right"
+                   android:tint="@color/grey_800"
+                   android:contentDescription="@string/registration_activity__powered_by_twilio"/>
 
     </LinearLayout>
 </ScrollView>

@@ -18,6 +18,8 @@
 package org.thoughtcrime.securesms;
 
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -26,13 +28,12 @@ import org.thoughtcrime.securesms.crypto.IdentityKeyUtil;
 import org.thoughtcrime.securesms.crypto.MasterSecret;
 import org.thoughtcrime.securesms.crypto.storage.TextSecureSessionStore;
 import org.thoughtcrime.securesms.recipients.Recipient;
-import org.thoughtcrime.securesms.util.DynamicLanguage;
-import org.thoughtcrime.securesms.util.DynamicTheme;
-import org.thoughtcrime.securesms.util.MemoryCleaner;
+import org.thoughtcrime.securesms.recipients.RecipientFactory;
+import org.whispersystems.libaxolotl.AxolotlAddress;
 import org.whispersystems.libaxolotl.IdentityKey;
 import org.whispersystems.libaxolotl.state.SessionRecord;
 import org.whispersystems.libaxolotl.state.SessionStore;
-import org.whispersystems.textsecure.api.push.PushAddress;
+import org.whispersystems.textsecure.api.push.TextSecureAddress;
 
 /**
  * Activity for verifying identity keys.
@@ -47,74 +48,42 @@ public class VerifyIdentityActivity extends KeyScanningActivity {
   private TextView localIdentityFingerprint;
   private TextView remoteIdentityFingerprint;
 
-  private final DynamicTheme    dynamicTheme    = new DynamicTheme   ();
-  private final DynamicLanguage dynamicLanguage = new DynamicLanguage();
-
   @Override
-  public void onCreate(Bundle state) {
-    dynamicTheme.onCreate(this);
-    dynamicLanguage.onCreate(this);
-    super.onCreate(state);
+  protected void onCreate(Bundle state, @NonNull MasterSecret masterSecret) {
+    this.masterSecret = masterSecret;
     getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+    getSupportActionBar().setTitle(R.string.AndroidManifest__verify_identity);
+
     setContentView(R.layout.verify_identity_activity);
 
-    initializeResources();
-    initializeFingerprints();
+    this.localIdentityFingerprint  = (TextView)findViewById(R.id.you_read);
+    this.remoteIdentityFingerprint = (TextView)findViewById(R.id.friend_reads);
   }
 
   @Override
   public void onResume() {
     super.onResume();
-    dynamicTheme.onResume(this);
-    dynamicLanguage.onResume(this);
-    getSupportActionBar().setTitle(R.string.AndroidManifest__verify_identity);
 
+    this.recipient = RecipientFactory.getRecipientForId(this, this.getIntent().getLongExtra("recipient", -1), true);
+
+    initializeFingerprints();
   }
 
-  @Override
-  protected void onDestroy() {
-    MemoryCleaner.clean(masterSecret);
-    super.onDestroy();
-  }
-
-  private void initializeLocalIdentityKey() {
+  private void initializeFingerprints() {
     if (!IdentityKeyUtil.hasIdentityKey(this)) {
       localIdentityFingerprint.setText(R.string.VerifyIdentityActivity_you_do_not_have_an_identity_key);
       return;
     }
 
     localIdentityFingerprint.setText(IdentityKeyUtil.getIdentityKey(this).getFingerprint());
-  }
 
-  private void initializeRemoteIdentityKey() {
-    IdentityKeyParcelable identityKeyParcelable = getIntent().getParcelableExtra("remote_identity");
-    IdentityKey           identityKey           = null;
-
-    if (identityKeyParcelable != null) {
-      identityKey = identityKeyParcelable.get();
-    }
-
-    if (identityKey == null) {
-      identityKey = getRemoteIdentityKey(masterSecret, recipient);
-    }
+    IdentityKey identityKey = getRemoteIdentityKey(masterSecret, recipient);
 
     if (identityKey == null) {
       remoteIdentityFingerprint.setText(R.string.VerifyIdentityActivity_recipient_has_no_identity_key);
     } else {
       remoteIdentityFingerprint.setText(identityKey.getFingerprint());
     }
-  }
-
-  private void initializeFingerprints() {
-    initializeLocalIdentityKey();
-    initializeRemoteIdentityKey();
-  }
-
-  private void initializeResources() {
-    this.localIdentityFingerprint  = (TextView)findViewById(R.id.you_read);
-    this.remoteIdentityFingerprint = (TextView)findViewById(R.id.friend_reads);
-    this.recipient                 = this.getIntent().getParcelableExtra("recipient");
-    this.masterSecret              = this.getIntent().getParcelableExtra("master_secret");
   }
 
   @Override
@@ -181,10 +150,16 @@ public class VerifyIdentityActivity extends KeyScanningActivity {
     return getString(R.string.VerifyIdentityActivity_verified_exclamation);
   }
 
-  private IdentityKey getRemoteIdentityKey(MasterSecret masterSecret, Recipient recipient) {
-    SessionStore  sessionStore = new TextSecureSessionStore(this, masterSecret);
-    SessionRecord record       = sessionStore.loadSession(recipient.getRecipientId(),
-                                                          PushAddress.DEFAULT_DEVICE_ID);
+  private @Nullable IdentityKey getRemoteIdentityKey(MasterSecret masterSecret, Recipient recipient) {
+    IdentityKeyParcelable identityKeyParcelable = getIntent().getParcelableExtra("remote_identity");
+
+    if (identityKeyParcelable != null) {
+      return identityKeyParcelable.get();
+    }
+
+    SessionStore   sessionStore   = new TextSecureSessionStore(this, masterSecret);
+    AxolotlAddress axolotlAddress = new AxolotlAddress(recipient.getNumber(), TextSecureAddress.DEFAULT_DEVICE_ID);
+    SessionRecord  record         = sessionStore.loadSession(axolotlAddress);
 
     if (record == null) {
       return null;

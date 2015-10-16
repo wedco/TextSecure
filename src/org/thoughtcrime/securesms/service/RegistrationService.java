@@ -12,12 +12,18 @@ import android.util.Log;
 
 import com.google.android.gms.gcm.GoogleCloudMessaging;
 
+import org.thoughtcrime.redphone.signaling.RedPhoneAccountAttributes;
+import org.thoughtcrime.redphone.signaling.RedPhoneAccountManager;
+import org.thoughtcrime.redphone.signaling.RedPhoneTrustStore;
+import org.thoughtcrime.securesms.BuildConfig;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil;
-import org.thoughtcrime.securesms.crypto.MasterSecret;
 import org.thoughtcrime.securesms.crypto.PreKeyUtil;
+import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.jobs.GcmRefreshJob;
 import org.thoughtcrime.securesms.push.TextSecureCommunicationFactory;
+import org.thoughtcrime.securesms.recipients.Recipient;
+import org.thoughtcrime.securesms.recipients.RecipientFactory;
 import org.thoughtcrime.securesms.util.DirectoryHelper;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.Util;
@@ -30,6 +36,7 @@ import org.whispersystems.textsecure.api.TextSecureAccountManager;
 import org.whispersystems.textsecure.api.push.exceptions.ExpectationFailedException;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -73,7 +80,7 @@ public class RegistrationService extends Service {
 
   private volatile RegistrationState registrationState = new RegistrationState(RegistrationState.STATE_IDLE);
 
-  private volatile Handler                 registrationStateHandler;
+  private volatile WeakReference<Handler>  registrationStateHandler;
   private volatile ChallengeReceiver       challengeReceiver;
   private          String                  challenge;
   private          long                    verificationStartTime;
@@ -149,15 +156,14 @@ public class RegistrationService extends Service {
   private void handleVoiceRegistrationIntent(Intent intent) {
     markAsVerifying(true);
 
-    String       number       = intent.getStringExtra("e164number");
-    String       password     = intent.getStringExtra("password"  );
-    String       signalingKey = intent.getStringExtra("signaling_key");
-    MasterSecret masterSecret = intent.getParcelableExtra("master_secret");
+    String number       = intent.getStringExtra("e164number");
+    String password     = intent.getStringExtra("password");
+    String signalingKey = intent.getStringExtra("signaling_key");
 
     try {
       TextSecureAccountManager accountManager = TextSecureCommunicationFactory.createManager(this, number, password);
 
-      handleCommonRegistration(masterSecret, accountManager, number);
+      handleCommonRegistration(accountManager, number, password, signalingKey);
 
       markAsVerified(number, password, signalingKey);
 
@@ -177,9 +183,8 @@ public class RegistrationService extends Service {
   private void handleSmsRegistrationIntent(Intent intent) {
     markAsVerifying(true);
 
-    String       number       = intent.getStringExtra("e164number");
-    MasterSecret masterSecret = intent.getParcelableExtra("master_secret");
-    int          registrationId = TextSecurePreferences.getLocalRegistrationId(this);
+    String number         = intent.getStringExtra("e164number");
+    int    registrationId = TextSecurePreferences.getLocalRegistrationId(this);
 
     if (registrationId == 0) {
       registrationId = KeyHelper.generateRegistrationId(false);
@@ -198,9 +203,9 @@ public class RegistrationService extends Service {
 
       setState(new RegistrationState(RegistrationState.STATE_VERIFYING, number));
       String challenge = waitForChallenge();
-      accountManager.verifyAccount(challenge, signalingKey, true, registrationId);
+      accountManager.verifyAccountWithCode(challenge, signalingKey, registrationId, true);
 
-      handleCommonRegistration(masterSecret, accountManager, number);
+      handleCommonRegistration(accountManager, number, password, signalingKey);
       markAsVerified(number, password, signalingKey);
 
       setState(new RegistrationState(RegistrationState.STATE_COMPLETE, number));
@@ -226,23 +231,34 @@ public class RegistrationService extends Service {
     }
   }
 
-  private void handleCommonRegistration(MasterSecret masterSecret, TextSecureAccountManager accountManager, String number)
+  private void handleCommonRegistration(TextSecureAccountManager accountManager, String number, String password, String signalingKey)
       throws IOException
   {
     setState(new RegistrationState(RegistrationState.STATE_GENERATING_KEYS, number));
-    IdentityKeyPair    identityKey  = IdentityKeyUtil.getIdentityKeyPair(this, masterSecret);
-    List<PreKeyRecord> records      = PreKeyUtil.generatePreKeys(this, masterSecret);
-    PreKeyRecord       lastResort   = PreKeyUtil.generateLastResortKey(this, masterSecret);
-    SignedPreKeyRecord signedPreKey = PreKeyUtil.generateSignedPreKey(this, masterSecret, identityKey);
+    Recipient          self         = RecipientFactory.getRecipientsFromString(this, number, false).getPrimaryRecipient();
+    IdentityKeyPair    identityKey  = IdentityKeyUtil.getIdentityKeyPair(this);
+    List<PreKeyRecord> records      = PreKeyUtil.generatePreKeys(this);
+    PreKeyRecord       lastResort   = PreKeyUtil.generateLastResortKey(this);
+    SignedPreKeyRecord signedPreKey = PreKeyUtil.generateSignedPreKey(this, identityKey);
     accountManager.setPreKeys(identityKey.getPublicKey(),lastResort, signedPreKey, records);
 
     setState(new RegistrationState(RegistrationState.STATE_GCM_REGISTERING, number));
 
     String gcmRegistrationId = GoogleCloudMessaging.getInstance(this).register(GcmRefreshJob.REGISTRATION_ID);
-    TextSecurePreferences.setGcmRegistrationId(this, gcmRegistrationId);
     accountManager.setGcmId(Optional.of(gcmRegistrationId));
 
+    TextSecurePreferences.setGcmRegistrationId(this, gcmRegistrationId);
+    TextSecurePreferences.setWebsocketRegistered(this, true);
+
+    DatabaseFactory.getIdentityDatabase(this).saveIdentity(self.getRecipientId(), identityKey.getPublicKey());
     DirectoryHelper.refreshDirectory(this, accountManager, number);
+
+    RedPhoneAccountManager redPhoneAccountManager = new RedPhoneAccountManager(BuildConfig.REDPHONE_MASTER_URL,
+                                                                               new RedPhoneTrustStore(this),
+                                                                               number, password);
+
+    String verificationToken = accountManager.getAccountVerificationToken();
+    redPhoneAccountManager.createAccount(verificationToken, new RedPhoneAccountAttributes(signalingKey, gcmRegistrationId));
 
     DirectoryRefreshListener.schedule(this);
   }
@@ -284,10 +300,13 @@ public class RegistrationService extends Service {
     TextSecurePreferences.setPushServerPassword(this, password);
     TextSecurePreferences.setSignalingKey(this, signalingKey);
     TextSecurePreferences.setSignedPreKeyRegistered(this, true);
+    TextSecurePreferences.setPromptedPushRegistration(this, true);
   }
 
   private void setState(RegistrationState state) {
     this.registrationState = state;
+
+    Handler registrationStateHandler = this.registrationStateHandler.get();
 
     if (registrationStateHandler != null) {
       registrationStateHandler.obtainMessage(state.state, state).sendToTarget();
@@ -300,17 +319,17 @@ public class RegistrationService extends Service {
 
     if (success) {
       intent.putExtra(NOTIFICATION_TITLE, getString(R.string.RegistrationService_registration_complete));
-      intent.putExtra(NOTIFICATION_TEXT, getString(R.string.RegistrationService_textsecure_registration_has_successfully_completed));
+      intent.putExtra(NOTIFICATION_TEXT, getString(R.string.RegistrationService_signal_registration_has_successfully_completed));
     } else {
       intent.putExtra(NOTIFICATION_TITLE, getString(R.string.RegistrationService_registration_error));
-      intent.putExtra(NOTIFICATION_TEXT, getString(R.string.RegistrationService_textsecure_registration_has_encountered_a_problem));
+      intent.putExtra(NOTIFICATION_TEXT, getString(R.string.RegistrationService_signal_registration_has_encountered_a_problem));
     }
 
     this.sendOrderedBroadcast(intent, null);
   }
 
   public void setRegistrationStateHandler(Handler registrationStateHandler) {
-    this.registrationStateHandler = registrationStateHandler;
+    this.registrationStateHandler = new WeakReference<>(registrationStateHandler);
   }
 
   public class RegistrationServiceBinder extends Binder {

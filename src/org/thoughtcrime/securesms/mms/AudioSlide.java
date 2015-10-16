@@ -16,81 +16,46 @@
  */
 package org.thoughtcrime.securesms.mms;
 
-import java.io.IOException;
+import android.content.Context;
+import android.content.res.Resources.Theme;
+import android.net.Uri;
+import android.support.annotation.DrawableRes;
+import android.support.annotation.NonNull;
 
 import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.util.SmilUtil;
-import org.w3c.dom.smil.SMILDocument;
-import org.w3c.dom.smil.SMILMediaElement;
-import org.w3c.dom.smil.SMILRegionElement;
-import org.w3c.dom.smil.SMILRegionMediaElement;
+import org.thoughtcrime.securesms.util.ResUtil;
 
+import java.io.IOException;
+
+import ws.com.google.android.mms.ContentType;
 import ws.com.google.android.mms.pdu.PduPart;
-import android.content.Context;
-import android.database.Cursor;
-import android.graphics.drawable.Drawable;
-import android.net.Uri;
-import android.provider.MediaStore.Audio;
 
 public class AudioSlide extends Slide {
+
+  public AudioSlide(Context context, Uri uri, long dataSize) throws IOException {
+    super(context, constructPartFromUri(context, uri, ContentType.AUDIO_UNSPECIFIED, dataSize));
+  }
 
   public AudioSlide(Context context, PduPart part) {
     super(context, part);
   }
 
-  public AudioSlide(Context context, Uri uri) throws IOException, MediaTooLargeException {
-    super(context, constructPartFromUri(context, uri));
-  }
-	
   @Override
-    public boolean hasImage() {
-    return true;
-  }
-	
-  @Override
-    public boolean hasAudio() {
+  public boolean hasImage() {
     return true;
   }
 
   @Override
-  public SMILRegionElement getSmilRegion(SMILDocument document) {
-    return null;
+  public boolean hasAudio() {
+    return true;
+  }
+
+  @NonNull @Override public String getContentDescription() {
+    return context.getString(R.string.Slide_audio);
   }
 
   @Override
-  public SMILMediaElement getMediaElement(SMILDocument document) {
-    return SmilUtil.createMediaElement("audio", document, new String(getPart().getName()));
-  }
-
-  @Override
-  public Drawable getThumbnail(int maxWidth, int maxHeight) {
-    return context.getResources().getDrawable(R.drawable.ic_menu_add_sound);
-  }
-
-  public static PduPart constructPartFromUri(Context context, Uri uri) throws IOException, MediaTooLargeException {
-    PduPart part = new PduPart();
-		
-    if (getMediaSize(context, uri) > MAX_MESSAGE_SIZE)
-      throw new MediaTooLargeException("Audio track larger than size maximum.");
-		
-    Cursor cursor = null;
-		
-    try {
-      cursor = context.getContentResolver().query(uri, new String[]{Audio.Media.MIME_TYPE}, null, null, null);
-			
-      if (cursor != null && cursor.moveToFirst())
-        part.setContentType(cursor.getString(0).getBytes());
-      else
-        throw new IOException("Unable to query content type.");
-    } finally {
-      if (cursor != null)
-        cursor.close();
-    } 
-
-    part.setDataUri(uri);
-    part.setContentId((System.currentTimeMillis()+"").getBytes());
-    part.setName(("Audio" + System.currentTimeMillis()).getBytes());
-		
-    return part;
+  public @DrawableRes int getPlaceholderRes(Theme theme) {
+    return ResUtil.getDrawableRes(theme, R.attr.conversation_icon_attach_audio);
   }
 }

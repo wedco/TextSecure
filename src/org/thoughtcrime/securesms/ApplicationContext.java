@@ -18,21 +18,27 @@ package org.thoughtcrime.securesms;
 
 import android.app.Application;
 import android.content.Context;
+import android.os.StrictMode;
+import android.os.StrictMode.ThreadPolicy;
+import android.os.StrictMode.VmPolicy;
 
 import org.thoughtcrime.securesms.crypto.PRNGFixes;
 import org.thoughtcrime.securesms.dependencies.AxolotlStorageModule;
 import org.thoughtcrime.securesms.dependencies.InjectableType;
+import org.thoughtcrime.securesms.dependencies.RedPhoneCommunicationModule;
 import org.thoughtcrime.securesms.dependencies.TextSecureCommunicationModule;
 import org.thoughtcrime.securesms.jobs.GcmRefreshJob;
+import org.thoughtcrime.securesms.jobs.RefreshAttributesJob;
 import org.thoughtcrime.securesms.jobs.persistence.EncryptingJobSerializer;
 import org.thoughtcrime.securesms.jobs.requirements.MasterSecretRequirementProvider;
+import org.thoughtcrime.securesms.jobs.requirements.MediaNetworkRequirementProvider;
 import org.thoughtcrime.securesms.jobs.requirements.ServiceRequirementProvider;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.jobqueue.JobManager;
 import org.whispersystems.jobqueue.dependencies.DependencyInjector;
 import org.whispersystems.jobqueue.requirements.NetworkRequirementProvider;
-
-import java.security.Security;
+import org.whispersystems.libaxolotl.logging.AxolotlLoggerProvider;
+import org.whispersystems.libaxolotl.util.AndroidAxolotlLogger;
 
 import dagger.ObjectGraph;
 
@@ -46,8 +52,10 @@ import dagger.ObjectGraph;
  */
 public class ApplicationContext extends Application implements DependencyInjector {
 
-  private JobManager jobManager;
+  private JobManager  jobManager;
   private ObjectGraph objectGraph;
+
+  private MediaNetworkRequirementProvider mediaNetworkRequirementProvider = new MediaNetworkRequirementProvider();
 
   public static ApplicationContext getInstance(Context context) {
     return (ApplicationContext)context.getApplicationContext();
@@ -55,7 +63,10 @@ public class ApplicationContext extends Application implements DependencyInjecto
 
   @Override
   public void onCreate() {
+    super.onCreate();
+    initializeDeveloperBuild();
     initializeRandomNumberFix();
+    initializeLogging();
     initializeDependencyInjection();
     initializeJobManager();
     initializeGcmCheck();
@@ -72,10 +83,22 @@ public class ApplicationContext extends Application implements DependencyInjecto
     return jobManager;
   }
 
+  private void initializeDeveloperBuild() {
+    if (BuildConfig.DEV_BUILD) {
+//      LeakCanary.install(this);
+      StrictMode.setThreadPolicy(new ThreadPolicy.Builder().detectAll()
+                                                           .penaltyLog()
+                                                           .build());
+      StrictMode.setVmPolicy(new VmPolicy.Builder().detectAll().penaltyLog().build());
+    }
+  }
 
   private void initializeRandomNumberFix() {
-    Security.insertProviderAt(new org.spongycastle.jce.provider.BouncyCastleProvider(), 1);
     PRNGFixes.apply();
+  }
+
+  private void initializeLogging() {
+    AxolotlLoggerProvider.setProvider(new AndroidAxolotlLogger());
   }
 
   private void initializeJobManager() {
@@ -85,13 +108,19 @@ public class ApplicationContext extends Application implements DependencyInjecto
                                 .withJobSerializer(new EncryptingJobSerializer())
                                 .withRequirementProviders(new MasterSecretRequirementProvider(this),
                                                           new ServiceRequirementProvider(this),
-                                                          new NetworkRequirementProvider(this))
+                                                          new NetworkRequirementProvider(this),
+                                                          mediaNetworkRequirementProvider)
                                 .withConsumerThreads(5)
                                 .build();
   }
 
+  public void notifyMediaControlEvent() {
+    mediaNetworkRequirementProvider.notifyMediaControlEvent();
+  }
+
   private void initializeDependencyInjection() {
     this.objectGraph = ObjectGraph.create(new TextSecureCommunicationModule(this),
+                                          new RedPhoneCommunicationModule(this),
                                           new AxolotlStorageModule(this));
   }
 
